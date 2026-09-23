@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,render_template
 
 app = Flask(__name__)
 
@@ -29,7 +29,7 @@ def submit():
 
 @app.route("/")
 def home():
-    return "Flask Backend is running!"
+    return render_template('index.html')
 
 
 if __name__ == "__main__":
