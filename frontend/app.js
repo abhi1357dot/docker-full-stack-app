@@ -1,8 +1,12 @@
+
 const express = require("express");
 
 const app = express();
 
 const PORT = 3000;
+
+// Backend URL
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
 // Configure EJS
 app.set("view engine", "ejs");
@@ -18,7 +22,7 @@ app.get("/", (req, res) => {
 // Handle form submission
 app.post("/submit", async (req, res) => {
     try {
-        const response = await fetch("http://backend:5000/submit", {
+        const response = await fetch(`${BACKEND_URL}/submit`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -42,6 +46,7 @@ app.post("/submit", async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Frontend running on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Frontend running on port ${PORT}`);
 });
+
