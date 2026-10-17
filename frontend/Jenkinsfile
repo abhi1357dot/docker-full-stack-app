@@ -1,0 +1,72 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        IMAGE_NAME = 'abishek1445/express-frontend'
+        CONTAINER_NAME = 'express-frontend'
+        DOCKER_NETWORK = 'flask-express-network'
+        BACKEND_URL = 'http://flask-backend:5000'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Express Image') {
+            steps {
+                dir('frontend') {
+                    sh '''
+                        set -eu
+                        docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy and Verify Express') {
+            steps {
+                sh '''
+                    set -eu
+
+                    OLD_CONTAINER="express-frontend-previous"
+                    NEW_CONTAINER="${CONTAINER_NAME}"
+
+                    docker rm -f "$OLD_CONTAINER" 2>/dev/null || true
+                    docker stop "$NEW_CONTAINER"
+                    docker rename "$NEW_CONTAINER" "$OLD_CONTAINER"
+
+                    rollback() {
+                        docker rm -f "$NEW_CONTAINER" 2>/dev/null || true
+                        docker rename "$OLD_CONTAINER" "$NEW_CONTAINER"
+                        docker start "$NEW_CONTAINER"
+                    }
+                    trap rollback EXIT
+
+                    docker run -d \
+                        --name "$NEW_CONTAINER" \
+                        --restart unless-stopped \
+                        --network "$DOCKER_NETWORK" \
+                        -e BACKEND_URL="$BACKEND_URL" \
+                        -p 3000:3000 \
+                        "${IMAGE_NAME}:${BUILD_NUMBER}"
+
+                    sleep 5
+
+                    curl --fail --silent --show-error \
+                        http://127.0.0.1:3000/ -o /dev/null
+
+                    trap - EXIT
+                    docker rm -f "$OLD_CONTAINER"
+                '''
+            }
+        }
+    }
+}
