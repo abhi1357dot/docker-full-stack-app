@@ -1,0 +1,77 @@
+
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        IMAGE_NAME = 'abishek1445/flask-backend'
+        CONTAINER_NAME = 'flask-backend'
+        DOCKER_NETWORK = 'flask-express-network'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies and Build') {
+            steps {
+                dir('backend') {
+                    sh '''
+                        docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                        docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
+                    '''
+                }
+            }
+        }
+
+        
+        stage('Deploy and Verify Flask') {
+            steps {
+                sh '''
+                    set -eu
+
+                    OLD_CONTAINER="flask-backend-previous"
+                    NEW_CONTAINER="flask-backend"
+
+                    # Keep a backup of the currently running container.
+                    docker rm -f "$OLD_CONTAINER" 2>/dev/null || true
+                    docker stop "$NEW_CONTAINER"
+                    docker rename "$NEW_CONTAINER" "$OLD_CONTAINER"
+
+                    # Restore the old container if deployment fails.
+                    rollback() {
+                        docker rm -f "$NEW_CONTAINER" 2>/dev/null || true
+                        docker rename "$OLD_CONTAINER" "$NEW_CONTAINER"
+                        docker start "$NEW_CONTAINER"
+                    }
+                    trap rollback EXIT
+
+                    # Start the newly built application.
+                    docker run -d \
+                      --name "$NEW_CONTAINER" \
+                      --restart unless-stopped \
+                      --network "$DOCKER_NETWORK" \
+                      -p 5000:5000 \
+                      "${IMAGE_NAME}:${BUILD_NUMBER}"
+
+                    # Verify the new application before removing the backup.
+                    sleep 5
+                    curl --fail --silent --show-error \
+                      http://127.0.0.1:5000/ -o /dev/null
+
+                    # Deployment succeeded; discard the backup.
+                    trap - EXIT
+                    docker rm -f "$OLD_CONTAINER"
+                '''
+            }
+        }
+
+    }
+}
